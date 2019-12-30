@@ -117,7 +117,11 @@ static CGSize CGSizeScale(CGSize size, CGFloat scale) {
     UIBarButtonItem *rightSpace = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:NULL];
     
     // Info label
-    NSDictionary *attributes = @{ NSForegroundColorAttributeName: [UIColor blackColor] };
+    UIColor *fColor = [UIColor blackColor];
+    if (@available(iOS 13.0, *)) {
+        fColor = [UIColor labelColor];
+    }
+    NSDictionary *attributes = @{ NSForegroundColorAttributeName: fColor };
     UIBarButtonItem *infoButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"" style:UIBarButtonItemStylePlain target:nil action:NULL];
     infoButtonItem.enabled = NO;
     [infoButtonItem setTitleTextAttributes:attributes forState:UIControlStateNormal];
@@ -366,28 +370,37 @@ static CGSize CGSizeScale(CGSize size, CGFloat scale) {
 
 #pragma mark - PHPhotoLibraryChangeObserver
 
-- (void)photoLibraryDidChange:(PHChange *)changeInstance
+-(void)photoLibraryDidChange:(PHChange *)changeInstance
 {
     dispatch_async(dispatch_get_main_queue(), ^{
         // Update fetch results
-        NSMutableArray *fetchResults = [self.fetchResults mutableCopy];
-        
-        [self.fetchResults enumerateObjectsUsingBlock:^(PHFetchResult *fetchResult, NSUInteger index, BOOL *stop) {
-            PHFetchResultChangeDetails *changeDetails = [changeInstance changeDetailsForFetchResult:fetchResult];
-            
-            if (changeDetails) {
-                [fetchResults replaceObjectAtIndex:index withObject:changeDetails.fetchResultAfterChanges];
-            }
-        }];
-        
-        if (![self.fetchResults isEqualToArray:fetchResults]) {
-            self.fetchResults = fetchResults;
-            
-            // Reload albums
+        if (@available(iOS 13.0, *)) {
+            PHFetchResult *smartAlbums = [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeSmartAlbum subtype:PHAssetCollectionSubtypeAny options:nil];
+            PHFetchResult *userAlbums = [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum subtype:PHAssetCollectionSubtypeAny options:nil];
+            self.fetchResults = @[smartAlbums, userAlbums];
             [self updateAssetCollections];
             [self.tableView reloadData];
+            return;
         }
-    });
+
+    NSMutableArray *fetchResults = [self.fetchResults mutableCopy];
+    
+    [self.fetchResults enumerateObjectsUsingBlock:^(PHFetchResult *fetchResult, NSUInteger index, BOOL *stop) {
+        PHFetchResultChangeDetails *changeDetails = [changeInstance changeDetailsForFetchResult:fetchResult];
+        
+        if (changeDetails) {
+            [fetchResults replaceObjectAtIndex:index withObject:changeDetails.fetchResultAfterChanges];
+        }
+    }];
+    
+    if (![self.fetchResults isEqualToArray:fetchResults]) {
+        self.fetchResults = fetchResults;
+
+        // Reload albums
+        [self updateAssetCollections];
+        [self.tableView reloadData];
+    }
+});
 }
 
 @end
